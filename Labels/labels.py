@@ -1,57 +1,75 @@
+import os
+import re
+import time
 import pandas as pd
 import musicbrainzngs
-import time
-import os
 
-# --- Setup MusicBrainz API ---
+# -------- Config --------
 musicbrainzngs.set_useragent("LabelFiller", "1.0", "your@email.com")
+RATE_LIMIT_SLEEP_SEC = 1  # be nice to the API
 
-# --- Ask for File Path ---
-file_path = input("📁 Paste the full path to your CSV file: ").strip()
-if not os.path.isfile(file_path):
-    print(f"❌ File not found: {file_path}")
-    exit(1)
+# Major labels to detect
+MAJORS = [
+    "universal", "sony", "warner", "columbia", "atlantic",
+    "interscope", "def jam", "rca", "epic", "virgin", "emi"
+]
 
-# --- Load CSV ---
-df = pd.read_csv(file_path)
-total_rows = len(df)
+# Values to treat as "no label" and blank out
+NO_LABEL_PATTERNS = {
+    "[no label]", "no label", "none", "n/a", "na", "[none]", "[n/a]",
+    "[unknown]", "unknown", "(no label)", "-", "—"
+}
 
-# --- Cache to avoid duplicate lookups ---
+# -------- Helpers --------
+def clean_label(val: object) -> str:
+    """Normalize LABEL cell to a clean string; convert any 'no label' placeholder to a true blank."""
+    if pd.isna(val):
+        return ""
+    s = str(val)
+
+    # Remove common hidden whitespace chars
+    s = s.replace("\u00A0", " ")  # non-breaking space
+    s = s.replace("\u200B", "")   # zero-width space
+    s = s.strip()
+
+    # Lowercased, single-spaced version for comparison
+    low = re.sub(r"\s+", " ", s).lower()
+    # Strip *single* surrounding brackets/parentheses (e.g., "[no label]" or "(no label)")
+    low = re.sub(r"^[\[\(]\s*|\s*[\]\)]$", "", low)
+
+    if low in NO_LABEL_PATTERNS:
+        return ""  # true blank
+    return s
+
+def classify_label_type(label: str) -> str:
+    """Classify non-empty labels as major or independent."""
+    if not label.strip():
+        return "self-released"
+    ll = label.lower()
+    return "major" if any(m in ll for m in MAJORS) else "independent"
+
 lookup_cache = {}
 
-# --- Helper: Determine label type ---
-def determine_label_type(label, artist):
-    if not label or label.strip().lower() in ["", "none", "self-released"]:
-        return "self-released"
-    if artist.lower() in label.lower():
-        return "self-released"
-
-    major_labels = ["universal", "sony", "warner", "columbia", "atlantic",
-                    "interscope", "def jam", "rca", "epic", "virgin", "emi"]
-    if any(major in label.lower() for major in major_labels):
-        return "major"
-
-    return "independent"
-
-# --- Helper: Query MusicBrainz for label ---
-def get_label(artist, album):
+def get_label_from_musicbrainz(artist: str, album: str):
+    """Return a label string or None if not found."""
     key = (artist.lower(), album.lower())
     if key in lookup_cache:
         return lookup_cache[key]
 
     try:
         print(f"  🔍 Querying: {artist} — {album}")
-        result = musicbrainzngs.search_releases(artist=artist, release=album, limit=1)
-        releases = result.get("release-list", [])
+        res = musicbrainzngs.search_releases(artist=artist, release=album, limit=1)
+        releases = res.get("release-list", [])
         if releases:
-            label_info = releases[0].get("label-info-list", [])
-            if label_info and "label" in label_info[0]:
-                label = label_info[0]["label"]["name"]
-                print(f"     🎯 Found label: {label}")
-                lookup_cache[key] = label
-                return label
-            else:
-                print("     ⚠️ No label info found")
+            label_info_list = releases[0].get("label-info-list", [])
+            if label_info_list and isinstance(label_info_list, list):
+                first = label_info_list[0]
+                if isinstance(first, dict) and "label" in first and "name" in first["label"]:
+                    label_name = first["label"]["name"]
+                    print(f"     🎯 Found label: {label_name}")
+                    lookup_cache[key] = label_name
+                    return label_name
+            print("     ⚠️ No label info found")
         else:
             print("     ❌ No releases found")
     except Exception as e:
@@ -60,39 +78,83 @@ def get_label(artist, album):
     lookup_cache[key] = None
     return None
 
-# --- Process Each Row ---
-print(f"\n🔍 Starting label lookup for {total_rows} rows...\n")
+# -------- Main --------
+def main():
+    file_path = input("📁 Paste the full path to your CSV file: ").strip()
+    if not os.path.isfile(file_path):
+        print(f"❌ File not found: {file_path}")
+        raise SystemExit(1)
 
-for idx, row in df.iterrows():
-    artist = str(row.get("ARTIST") or "").strip()
-    album = str(row.get("ALBUM") or "").strip()
-    label = row.get("LABEL")
+    df = pd.read_csv(file_path)
+    df.columns = df.columns.str.strip()
 
-    print(f"[{idx + 1}/{total_rows}] {artist} – {album}", end="")
+    # Ensure columns exist
+    if "LABEL" not in df.columns:
+        df["LABEL"] = ""
+    if "LABEL TYPE" not in df.columns:
+        df["LABEL TYPE"] = ""
 
-    if not artist or not album:
-        print(" ❌ Skipped (missing artist or album)")
-        continue
+    # Clean existing LABEL values first
+    df["LABEL"] = df["LABEL"].apply(clean_label)
+    df["LABEL TYPE"] = df["LABEL TYPE"].astype(str).where(df["LABEL TYPE"].notna(), "").str.strip()
 
-    if pd.notna(label) and str(label).strip() != "":
-        print(" ✅ Already filled")
-        continue
+    total_rows = len(df)
+    updated_from_mb = 0
+    defaulted_self_released = 0
+    already_classified = 0
 
-    found_label = get_label(artist, album)
-    if found_label:
-        df.at[idx, "LABEL"] = found_label
-        df.at[idx, "LABEL TYPE"] = determine_label_type(found_label, artist)
-        print(" ✅ Updated")
-    else:
-        # Leave LABEL blank and set LABEL TYPE to self-released
-        df.at[idx, "LABEL"] = ""
-        df.at[idx, "LABEL TYPE"] = "self-released"
-        print(" ⚠️  No label found — defaulting to self-released")
+    print(f"\n🔍 Starting label lookup for {total_rows} rows...\n")
 
-    time.sleep(1)  # prevent rate limits
+    for idx, row in df.iterrows():
+        artist = str(row.get("ARTIST") or "").strip()
+        album  = str(row.get("ALBUM")  or "").strip()
+        label  = str(row.get("LABEL")  or "").strip()
 
-# --- Save Updated File ---
-base, ext = os.path.splitext(file_path)
-output_path = f"{base}_filled{ext}"
-df.to_csv(output_path, index=False)
-print(f"\n✅ Done! File saved as:\n{output_path}")
+        print(f"[{idx + 1}/{total_rows}] {artist} – {album}", end="")
+
+        if not artist or not album:
+            print(" ❌ Skipped (missing artist or album)")
+            continue
+
+        if label:
+            # Label present -> classify major/independent
+            df.at[idx, "LABEL TYPE"] = classify_label_type(label)
+            already_classified += 1
+            print(" ✅ Already filled")
+            continue
+
+        # LABEL is blank -> try MusicBrainz
+        found = get_label_from_musicbrainz(artist, album)
+        if found:
+            df.at[idx, "LABEL"] = found
+            df.at[idx, "LABEL TYPE"] = classify_label_type(found)
+            updated_from_mb += 1
+            print(" ✅ Updated")
+        else:
+            # No label found -> blank + self-released
+            df.at[idx, "LABEL"] = ""
+            df.at[idx, "LABEL TYPE"] = "self-released"
+            defaulted_self_released += 1
+            print(" ⚠️  No label found — defaulting to self-released")
+
+        time.sleep(RATE_LIMIT_SLEEP_SEC)
+
+    # Safety pass: enforce your rules one last time
+    df["LABEL"] = df["LABEL"].apply(clean_label)
+    df.loc[df["LABEL"] == "", "LABEL TYPE"] = "self-released"
+
+    # Save
+    base, ext = os.path.splitext(file_path)
+    output_path = f"{base}_filled{ext}"
+    df.to_csv(output_path, index=False)
+
+    # Summary
+    print("\n✅ Done!")
+    print(f"📄 Saved: {output_path}\n")
+    print("Summary:")
+    print(f"  • Rows with label already present and classified: {already_classified}")
+    print(f"  • Rows updated from MusicBrainz:                {updated_from_mb}")
+    print(f"  • Rows defaulted to self-released (no label):   {defaulted_self_released}")
+
+if __name__ == "__main__":
+    main()
