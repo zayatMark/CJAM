@@ -15,14 +15,13 @@ MONTHS = {
     "Jul": 7, "Aug": 8, "Sep": 9, "Oct": 10, "Nov": 11, "Dec": 12
 }
 
-# Patterns to remove (case-insensitive)
+# Remove these tokens anywhere in a line (case-insensitive)
 REMOVE_PATTERNS = [
     r"\bband\s+twitter\b",
     r"\blabel\s+website\b",
     r"\bband\s+website\b",
     r"\bwebsite\b",
 ]
-
 REMOVE_RE = re.compile("|".join(f"(?:{p})" for p in REMOVE_PATTERNS), re.IGNORECASE)
 
 def looks_like_header(line: str) -> bool:
@@ -36,16 +35,16 @@ def looks_like_header(line: str) -> bool:
     return False
 
 def normalize_unicode(s: str) -> str:
-    # Normalize to NFC so accents combine correctly in Excel/Windows
+    # Normalize to NFC so accented chars render correctly in Excel
     return unicodedata.normalize("NFC", s)
 
 def sanitize_line(line: str) -> str:
-    """Remove 'website' and 'band twitter' mentions and tidy separators."""
+    """Remove 'website'/'band twitter' mentions and tidy separators."""
     s = REMOVE_RE.sub("", line)
-    # collapse multiple spaces and stray separators left behind
-    s = re.sub(r"\s*[|]\s*", " - ", s)            # convert pipes to dashes if any
-    s = re.sub(r"\s+-\s+", " - ", s)              # tidy dash spacing
-    s = re.sub(r"\s{2,}", " ", s)                 # collapse spaces
+    # Normalize separators and whitespace
+    s = re.sub(r"\s*[|]\s*", " - ", s)   # convert pipes to ' - '
+    s = re.sub(r"\s+-\s+", " - ", s)     # tidy dash spacing
+    s = re.sub(r"\s{2,}", " ", s)        # collapse multiple spaces
     s = s.strip(" -|, \t")
     return s
 
@@ -74,6 +73,7 @@ def parse_line(line: str):
     date_raw = m[-1].group(0)
     date_fmt = format_date(date_raw)
 
+    # Expect "Artist - Album - Label - Date"
     parts = line.split(" - ")
     if len(parts) < 2:
         return None
@@ -88,15 +88,22 @@ def parse_line(line: str):
 def parse_text(text: str):
     rows = []
     for raw in text.splitlines():
+        # Normalize early
         line = normalize_unicode(raw)
+
+        # Skip section headers and blanks
         if looks_like_header(line):
             continue
+
+        # Quick gate for obviously irrelevant lines
         if " - " not in line and " | " not in line:
-            # if no obvious separators at all, skip early
             continue
+
+        # Clean up mentions and separators
         line = sanitize_line(line)
         if " - " not in line:
             continue
+
         parsed = parse_line(line)
         if parsed:
             rows.append(parsed)
@@ -116,17 +123,18 @@ def main():
 
     outfile = infile.with_suffix(".csv")
 
-    # Read and normalize text
     text = infile.read_text(encoding="utf-8", errors="ignore")
     text = normalize_unicode(text)
 
     rows = parse_text(text)
-
     if not rows:
         print("No valid releases found. Check formatting / dates.")
         sys.exit(1)
 
-    # Write CSV with UTF-8 BOM so Excel opens it cleanly on Windows
+    # NEW: sort by Date (ascending). Python sort is stable.
+    rows.sort(key=lambda x: x[2])
+
+    # Write CSV with UTF-8 BOM so Excel opens it cleanly
     with outfile.open("w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f)
         w.writerow(["Artist", "Album", "Date"])
