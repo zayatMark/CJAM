@@ -16,8 +16,8 @@ MAJORS = [
 
 # Values to treat as "no label" and blank out
 NO_LABEL_PATTERNS = {
-    "[no label]", "no label", "none", "n/a", "na", "[none]", "[n/a]",
-    "[unknown]", "unknown", "(no label)", "-", "—"
+    "no label", "none", "n/a", "na", "unknown",
+    "(no label)", "-", "—"
 }
 
 # -------- Helpers --------
@@ -25,30 +25,35 @@ def clean_label(val: object) -> str:
     """Normalize LABEL cell to a clean string; convert any 'no label' placeholder to a true blank."""
     if pd.isna(val):
         return ""
+
     s = str(val)
 
-    # Remove common hidden whitespace chars
-    s = s.replace("\u00A0", " ")  # non-breaking space
-    s = s.replace("\u200B", "")   # zero-width space
+    # Remove hidden whitespace chars
+    s = s.replace("\u00A0", " ")   # non-breaking space
+    s = s.replace("\u200B", "")    # zero-width space
     s = s.strip()
 
-    # Lowercased, single-spaced version for comparison
+    # Lowercase, normalized for comparison
     low = re.sub(r"\s+", " ", s).lower()
-    # Strip *single* surrounding brackets/parentheses (e.g., "[no label]" or "(no label)")
     low = re.sub(r"^[\[\(]\s*|\s*[\]\)]$", "", low)
 
     if low in NO_LABEL_PATTERNS:
-        return ""  # true blank
+        return ""
+
     return s
+
 
 def classify_label_type(label: str) -> str:
     """Classify non-empty labels as major or independent."""
     if not label.strip():
         return "self-released"
+
     ll = label.lower()
     return "major" if any(m in ll for m in MAJORS) else "independent"
 
+
 lookup_cache = {}
+
 
 def get_label_from_musicbrainz(artist: str, album: str):
     """Return a label string or None if not found."""
@@ -58,34 +63,54 @@ def get_label_from_musicbrainz(artist: str, album: str):
 
     try:
         print(f"  🔍 Querying: {artist} — {album}")
-        res = musicbrainzngs.search_releases(artist=artist, release=album, limit=1)
+        res = musicbrainzngs.search_releases(
+            artist=artist,
+            release=album,
+            limit=1
+        )
+
         releases = res.get("release-list", [])
         if releases:
-            label_info_list = releases[0].get("label-info-list", [])
-            if label_info_list and isinstance(label_info_list, list):
-                first = label_info_list[0]
-                if isinstance(first, dict) and "label" in first and "name" in first["label"]:
-                    label_name = first["label"]["name"]
-                    print(f"     🎯 Found label: {label_name}")
-                    lookup_cache[key] = label_name
-                    return label_name
+            label_info = releases[0].get("label-info-list", [])
+            if label_info and isinstance(label_info, list):
+                first = label_info[0]
+                if isinstance(first, dict):
+                    label = first.get("label", {})
+                    if isinstance(label, dict) and "name" in label:
+                        label_name = label["name"]
+                        print(f"     🎯 Found label: {label_name}")
+                        lookup_cache[key] = label_name
+                        return label_name
+
             print("     ⚠️ No label info found")
         else:
             print("     ❌ No releases found")
+
     except Exception as e:
         print(f"     ❌ Error: {e}")
 
     lookup_cache[key] = None
     return None
 
+
 # -------- Main --------
 def main():
-    file_path = input("📁 Paste the full path to your CSV file: ").strip()
+    file_path = input("📁 Paste the full path to your CSV or Excel file: ").strip()
     if not os.path.isfile(file_path):
         print(f"❌ File not found: {file_path}")
         raise SystemExit(1)
 
-    df = pd.read_csv(file_path)
+    ext = os.path.splitext(file_path)[1].lower()
+
+    # --- Load file ---
+    if ext in [".xlsx", ".xls"]:
+        df = pd.read_excel(file_path)
+    else:
+        try:
+            df = pd.read_csv(file_path, encoding="utf-8")
+        except UnicodeDecodeError:
+            df = pd.read_csv(file_path, encoding="utf-8-sig")
+
     df.columns = df.columns.str.strip()
 
     # Ensure columns exist
@@ -94,9 +119,9 @@ def main():
     if "LABEL TYPE" not in df.columns:
         df["LABEL TYPE"] = ""
 
-    # Clean existing LABEL values first
+    # Clean existing LABEL values
     df["LABEL"] = df["LABEL"].apply(clean_label)
-    df["LABEL TYPE"] = df["LABEL TYPE"].astype(str).where(df["LABEL TYPE"].notna(), "").str.strip()
+    df["LABEL TYPE"] = df["LABEL TYPE"].fillna("").astype(str).str.strip()
 
     total_rows = len(df)
     updated_from_mb = 0
@@ -107,8 +132,8 @@ def main():
 
     for idx, row in df.iterrows():
         artist = str(row.get("ARTIST") or "").strip()
-        album  = str(row.get("ALBUM")  or "").strip()
-        label  = str(row.get("LABEL")  or "").strip()
+        album = str(row.get("ALBUM") or "").strip()
+        label = str(row.get("LABEL") or "").strip()
 
         print(f"[{idx + 1}/{total_rows}] {artist} – {album}", end="")
 
@@ -117,13 +142,11 @@ def main():
             continue
 
         if label:
-            # Label present -> classify major/independent
             df.at[idx, "LABEL TYPE"] = classify_label_type(label)
             already_classified += 1
             print(" ✅ Already filled")
             continue
 
-        # LABEL is blank -> try MusicBrainz
         found = get_label_from_musicbrainz(artist, album)
         if found:
             df.at[idx, "LABEL"] = found
@@ -131,7 +154,6 @@ def main():
             updated_from_mb += 1
             print(" ✅ Updated")
         else:
-            # No label found -> blank + self-released
             df.at[idx, "LABEL"] = ""
             df.at[idx, "LABEL TYPE"] = "self-released"
             defaulted_self_released += 1
@@ -139,22 +161,27 @@ def main():
 
         time.sleep(RATE_LIMIT_SLEEP_SEC)
 
-    # Safety pass: enforce your rules one last time
+    # Final enforcement
     df["LABEL"] = df["LABEL"].apply(clean_label)
     df.loc[df["LABEL"] == "", "LABEL TYPE"] = "self-released"
 
-    # Save
-    base, ext = os.path.splitext(file_path)
-    output_path = f"{base}_filled{ext}"
-    df.to_csv(output_path, index=False)
+    # --- Save output ---
+    base, _ = os.path.splitext(file_path)
+    output_path = f"{base}_filled{ext if ext in ['.xlsx', '.xls'] else '.csv'}"
+
+    if ext in [".xlsx", ".xls"]:
+        df.to_excel(output_path, index=False)
+    else:
+        df.to_csv(output_path, index=False, encoding="utf-8-sig")
 
     # Summary
     print("\n✅ Done!")
     print(f"📄 Saved: {output_path}\n")
     print("Summary:")
-    print(f"  • Rows with label already present and classified: {already_classified}")
-    print(f"  • Rows updated from MusicBrainz:                {updated_from_mb}")
-    print(f"  • Rows defaulted to self-released (no label):   {defaulted_self_released}")
+    print(f"  • Rows already classified:            {already_classified}")
+    print(f"  • Rows updated from MusicBrainz:       {updated_from_mb}")
+    print(f"  • Rows defaulted to self-released:     {defaulted_self_released}")
+
 
 if __name__ == "__main__":
     main()
