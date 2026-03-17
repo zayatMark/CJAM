@@ -1,0 +1,197 @@
+<style>
+  /* --- KEEP EVERYTHING ABOVE THIS POINT AS-IS (your existing CSS) --- */
+  .sc-wrap{
+    --bg:#f0f7fb; --fg:#1a1a1a; --muted:#4a5a6a; --accent:#007c91; --card:#ffffff; --ring:#c9dce6;
+    --pad:clamp(16px,3vw,28px);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+    color:var(--fg);
+    background:var(--bg);
+    border:1px solid var(--ring);
+    border-radius:18px;
+    padding:var(--pad);
+    max-width:900px; margin:32px auto;
+    box-shadow: 0 6px 18px rgba(0,0,0,.08);
+  }
+  .sc-eyebrow{letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:600; font-size:.85rem; margin-bottom:.25rem}
+  .sc-title{font-size:clamp(1.6rem, 3.2vw, 2.2rem); line-height:1.15; margin:0 0 .5rem 0}
+  .sc-sub{color:var(--muted); margin:0 0 1.25rem 0}
+
+  /* Intro card */
+  .sc-intro{
+    background:var(--card); border:1px solid var(--ring); border-radius:14px; padding:16px 18px;
+  }
+  .sc-intro p{margin:.5rem 0; color:var(--fg)}
+
+  /* Buttons */
+  .sc-badges{display:flex; flex-wrap:wrap; margin-top:12px;}
+  .sc-btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:.55em;
+    padding:10px 14px; border-radius:999px; border:1px solid var(--ring); background:#eaf4f8;
+    text-decoration:none; color:var(--fg); font-weight:600; transition:transform .08s ease, background .2s ease, border-color .2s ease;
+    margin-right:10px; margin-bottom:10px;
+  }
+  .sc-btn:last-child{margin-right:0}
+  .sc-btn:hover{transform:translateY(-1px); background:#dcecf2; border-color:#b7d3e3}
+  .sc-btn.is-accent{background:var(--accent); border-color:transparent; color:#fff}
+
+  /* Sections / cards */
+  .sc-section{margin-top:22px}
+  .sc-h2{font-size:1.1rem; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); margin:0 0 .6rem 0}
+  .sc-card{background:var(--card); border:1px solid var(--ring); border-radius:14px; padding:18px;}
+
+  .sc-foot{margin-top:18px; color:var(--muted); font-size:.92rem}
+  .sc-divider{height:1px; background:#d6e6ef; border:0; margin:18px 0}
+
+  /* --- Singles Club featured releases --- */
+  .sc-monthnote{color:var(--fg); margin:0 0 10px 0}
+  .sc-grid{display:grid; gap:14px}
+
+  .sc-release{
+    background:var(--card);
+    border:1px solid var(--ring);
+    border-radius:14px;
+    padding:14px; /* tightened */
+  }
+
+  .sc-releasehead{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:12px;
+    flex-wrap:wrap;
+    margin-bottom:6px; /* tightened */
+  }
+
+  .sc-release-title{
+    margin:0;
+    font-size:1.15rem;
+    line-height:1.25;
+  }
+  .sc-release-title em{font-style:italic}
+
+  .sc-meta{
+    display:flex;
+    gap:6px;        /* tightened */
+    flex-wrap:wrap;
+    align-items:center;
+    margin-top:4px; /* tightened */
+  }
+
+  .sc-chip{
+    font-size:.92rem;
+    padding:.25rem .55rem;
+    border-radius:10px;
+    border:1px solid #c9dce6;
+    background:#eaf2f8;
+    color:#405466;
+    white-space:nowrap;
+  }
+
+  .sc-chip.is-genre{
+    color:#007c91;
+    background:#e0f6f9;
+    border-color:#a3dbe2;
+  }
+
+  .sc-links{
+    margin-top:4px;
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    color:var(--muted);
+    font-weight:600;
+    font-size:.95rem;
+  }
+
+  .sc-links a{
+    color:inherit;
+    text-decoration:underline;
+    text-underline-offset:2px;
+  }
+
+  .sc-embed{
+    margin-top:10px; /* tightened */
+    border-radius:12px;
+    overflow:hidden;
+    border:1px solid var(--ring);
+    background:#f7fbfe;
+  }
+
+  .sc-embed iframe{
+    display:block;
+    width:100%;
+    border:0;
+  }
+
+  .sc-blurb{
+    margin:8px 0 0 0; /* tightened */
+    color:var(--fg);
+    line-height:1.5;
+  }
+
+  .sc-closing{
+    margin-top:14px;
+    color:var(--muted);
+  }
+
+  /* Normalize WordPress paragraph spacing inside releases */
+  .sc-release p{
+    margin:0.5rem 0;
+  }
+</style>
+
+<div class="sc-wrap">
+  <div class="sc-eyebrow">CJAM 99.1 FM • Singles Club</div>
+  <h1 class="sc-title">[Month] [Year]</h1>
+  <p class="sc-sub">A monthly spotlight on Windsor–Detroit artists selected by CJAM’s Music Department.</p>
+
+  <section class="sc-intro">
+    <strong>What is Singles Club?</strong>
+    Each month we share a selection of singles from Windsor and Detroit artists. It’s a snapshot of what’s happening in our community right now, highlighting music we’re excited to put on your radar.
+    Stream the playlist or grab the MP3s below. If you’re an artist with a new single, please use
+    <a href="[SUBMISSION_FORM_LINK]" target="_blank" rel="noopener">this form</a>
+    to send it our way for next month’s consideration.
+
+    <div class="sc-badges">
+      <a class="sc-btn" href="[GOOGLE_DRIVE_MP3_LINK]" target="_blank" rel="noopener">Download MP3s (Google Drive)</a>
+    </div>
+  </section>
+
+  <hr class="sc-divider" />
+
+  <section class="sc-section">
+    <h2 class="sc-h2">This month</h2>
+    <p class="sc-monthnote">[2–3 sentence curatorial intro.]</p>
+
+    <div class="sc-grid">
+
+      <!-- Repeat this block 7× -->
+      <article class="sc-release">
+        <div class="sc-releasehead">
+          <div>
+            <h3 class="sc-release-title">1. [Artist] — <em>[Track / Release Title]</em></h3>
+            <div class="sc-links">
+              <span>IG: <a href="[INSTAGRAM_URL]" target="_blank" rel="noopener">@[handle]</a></span>
+            </div>
+          </div>
+          <div class="sc-meta">
+            <span class="sc-chip is-genre">[Genre]</span>
+            <span class="sc-chip">[Location]</span>
+          </div>
+        </div>
+
+        <div class="sc-embed">
+          <!-- [BANDCAMP_IFRAME] -->
+        </div>
+
+        <p class="sc-blurb">[1–2 sentence description of sound.]</p>
+      </article>
+
+    </div>
+
+    <p class="sc-closing"><strong>Closing note:</strong> [Optional short wrap-up.]</p>
+  </section>
+
+  <p class="sc-foot">Curated by CJAM’s Music Department • Windsor–Detroit • [Month Year]</p>
+</div>
+<!-- /CJAM Singles Club -->

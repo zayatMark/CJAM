@@ -232,7 +232,7 @@ def main():
 
     # Your genre buckets
     genres = [
-        "indie/rock/alt",
+        "indie/rock/alt/pop",
         "folk/blues",
         "electronic",
         "hip-hop",
